@@ -133,13 +133,13 @@ async function ensurePatientExistsInDb(patientId: string): Promise<boolean> {
     
     const dbPat = cleanPatientForPostgres(patientData || {
       id: cleanId,
-      name: 'Amit Patel',
+      name: 'Walk-in Patient',
       gender: 'Male',
-      age: 28,
-      phone: '9876543210',
-      address: 'B-42, Sector 15, Noida',
-      blood_group: 'A+',
-      bloodGroup: 'A+',
+      age: 30,
+      phone: '0000000000',
+      address: 'N/A',
+      blood_group: 'O+',
+      bloodGroup: 'O+',
       status: 'Active'
     });
     

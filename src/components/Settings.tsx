@@ -356,6 +356,7 @@ export default function Settings({ currentUser, onUserUpdate, onHospitalUpdate }
   const [dbUrl, setDbUrl] = useState(() => getCleanedStateItem('hms_supabase_url') || getCleanedEnvVal(import.meta.env.VITE_SUPABASE_URL) || 'https://nlyfngpitxuqtczeqjaw.supabase.co');
   const [dbKey, setDbKey] = useState(() => getCleanedStateItem('hms_supabase_anon_key') || getCleanedEnvVal(import.meta.env.VITE_SUPABASE_ANON_KEY) || 'sb_publishable_q0e5J5_yWRYl_KHS7U6HhA_zbTpGZdC');
   const [isDbSaving, setIsDbSaving] = useState(false);
+  const [isPurging, setIsPurging] = useState(false);
 
   // Database tables checking state
   const [tableChecks, setTableChecks] = useState<Record<string, { status: 'idle' | 'checking' | 'connected' | 'error'; count?: number; errorMsg?: string }>>({
@@ -549,6 +550,125 @@ export default function Settings({ currentUser, onUserUpdate, onHospitalUpdate }
     setTimeout(() => {
       window.location.reload();
     }, 1500);
+  };
+
+  const handlePurgeDemoData = async () => {
+    if (!window.confirm("Are you sure you want to delete all seeded demo data (including patients Amit Patel, Priya Singh, Rahul Sharma and their related invoices, appointments, and medical entries)? This action is permanent and cannot be undone.")) {
+      return;
+    }
+
+    setIsPurging(true);
+    try {
+      // 1. Identify target patients in local storage first
+      const patients = storage.get(STORAGE_KEYS.PATIENTS, []);
+      const demoPatients = patients.filter((p: any) => {
+        const name = (p.name || '').toLowerCase();
+        return name.includes('amit patel') || name.includes('priya singh') || name.includes('rahul sharma') || name.includes('sameer khan');
+      });
+      const demoIds = demoPatients.map((p: any) => p.id);
+
+      // 2. Filter local storage records
+      const cleanLocalData = (key: string, idField: string = 'patientId') => {
+        const list = storage.get(key, []);
+        if (!Array.isArray(list)) return;
+        const filtered = list.filter((item: any) => {
+          if (!item) return false;
+          const itemId = item[idField] || item.patient_id || item.patientId || '';
+          if (demoIds.includes(itemId)) return false;
+          const pName = (item.patient_name || item.patientName || item.name || '').toLowerCase();
+          if (pName.includes('amit patel') || pName.includes('priya singh') || pName.includes('rahul sharma') || pName.includes('sameer khan')) return false;
+          return true;
+        });
+        storage.set(key, filtered);
+      };
+
+      // Clean local keys
+      cleanLocalData(STORAGE_KEYS.PATIENTS, 'id');
+      cleanLocalData(STORAGE_KEYS.APPOINTMENTS, 'patientId');
+      cleanLocalData(STORAGE_KEYS.BILLING, 'patientId');
+      cleanLocalData(STORAGE_KEYS.PHARMACY_BILLS, 'patientId');
+      cleanLocalData(STORAGE_KEYS.PRESCRIPTIONS, 'patientId');
+      cleanLocalData(STORAGE_KEYS.PATIENT_VITALS, 'patientId');
+      cleanLocalData(STORAGE_KEYS.LAB_TEST_ORDERS, 'patient_id');
+
+      // Also clean 'hms_admissions'
+      cleanLocalData('hms_admissions', 'patientId');
+
+      // 3. Clean live Supabase DB if connected
+      if (isSupabaseConfigured) {
+        toast.info("Connecting to Supabase to purge cloud records...", { duration: 2000 });
+        
+        // Fetch matching cloud patients
+        const { data: dbPatients, error: fetchErr } = await supabase
+          .from('patients')
+          .select('id, name')
+          .or('name.ilike.%Amit Patel%,name.ilike.%Priya Singh%,name.ilike.%Rahul Sharma%');
+
+        if (fetchErr) {
+          console.warn("Could not query patients on Supabase:", fetchErr.message);
+        } else if (dbPatients && dbPatients.length > 0) {
+          const cloudIds = dbPatients.map(p => p.id);
+          console.log("Found cloud patient IDs to purge:", cloudIds);
+
+          const dependentTables = [
+            'appointments',
+            'quick_registrations',
+            'live_queue',
+            'admissions',
+            'patient_vitals',
+            'clinical_notes',
+            'prescriptions',
+            'test_requests',
+            'insurance_claims',
+            'discharge_summaries',
+            'ot_schedules',
+            'nursing_notes'
+          ];
+
+          for (const table of dependentTables) {
+            await supabase.from(table).delete().in('patient_id', cloudIds);
+          }
+
+          // Fetch invoices for items cleanup
+          const { data: dbInvoices } = await supabase
+            .from('invoices')
+            .select('id')
+            .in('patient_id', cloudIds);
+
+          if (dbInvoices && dbInvoices.length > 0) {
+            const invoiceIds = dbInvoices.map(i => i.id);
+            await supabase.from('invoice_items').delete().in('invoice_id', invoiceIds);
+            await supabase.from('invoices').delete().in('id', invoiceIds);
+          }
+
+          // Finally, delete the patients
+          const { error: patDelErr } = await supabase.from('patients').delete().in('id', cloudIds);
+          if (patDelErr) {
+            console.error("Error deleting patients from Supabase:", patDelErr);
+          }
+        }
+      }
+
+      toast.success("Successfully purged seeded dummy data!", {
+        description: "Seeded patients, billing records, and appointments have been cleared from system registers.",
+        duration: 4000
+      });
+
+      // Dispatch event to force other active panels to refresh
+      window.dispatchEvent(new CustomEvent('supabase-data-sync', { detail: { action: 'sync' } }));
+      
+      // Delay to refresh view state
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+
+    } catch (err: any) {
+      toast.error("An error occurred while purging dummy data", {
+        description: err.message || "Failed to complete purge process."
+      });
+    } finally {
+      setIsPurging(false);
+    }
   };
 
   // Profile State
@@ -2834,6 +2954,37 @@ export default function Settings({ currentUser, onUserUpdate, onHospitalUpdate }
                         {isSyncing ? "Uploading Cache..." : "Force Sync With Cloud"}
                       </Button>
                     )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-none shadow-sm border-l-4 border-rose-500">
+                  <CardHeader>
+                    <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-800">
+                      <Trash2 className="w-5 h-5 text-rose-500" />
+                      Database Maintenance
+                    </CardTitle>
+                    <CardDescription>
+                      Purge seeded demo entries and reset transaction registers to prepare for live patient records.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-3 bg-rose-50 rounded-xl border border-rose-100 space-y-1">
+                      <p className="text-[10px] uppercase font-bold text-rose-700">Database Purge Action</p>
+                      <p className="text-xs text-rose-600 leading-relaxed font-medium">
+                        This will delete Amit Patel, Priya Singh, and other mock patients along with their associated billing records and histories.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold gap-2 mt-2"
+                      onClick={handlePurgeDemoData}
+                      disabled={isPurging}
+                    >
+                      <Trash2 className={`w-4 h-4 ${isPurging ? 'animate-spin' : ''}`} />
+                      {isPurging ? "Purging Records..." : "Purge All Seeded Demo Data"}
+                    </Button>
                   </CardContent>
                 </Card>
               </div>

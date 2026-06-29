@@ -8,26 +8,55 @@ const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_q0e5J5
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function run() {
-  console.log('Fetching hospital_info...');
-  const { data: hData, error: hErr } = await supabase.from('hospital_info').select('*').limit(1);
-  if (hErr) {
-    console.error('hErr:', hErr);
+  console.log('Fetching all patients...');
+  const { data: allPatients, error: pErr } = await supabase
+    .from('patients')
+    .select('*');
+  
+  if (pErr) {
+    console.error('Error fetching patients:', pErr);
     return;
   }
-  console.log('Current row:', hData);
   
-  console.log('Fetching patients count...');
-  const { data: pData, error: pErr } = await supabase.from('patients').select('id, name, mrn, phone, registration_type, status, created_at');
-  if (pErr) console.error('pErr:', pErr);
-  else {
-    console.log('Patients count in DB:', pData?.length);
-    console.log('Patients in DB:', JSON.stringify(pData, null, 2));
+  console.log('All patients currently in DB:', allPatients);
+  
+  const patients = (allPatients || []).filter(p => {
+    const name = (p.name || '').toLowerCase();
+    const mrn = (p.mrn || '').toLowerCase();
+    const id = (p.id || '').toLowerCase();
+    return name.includes('amit') || mrn.includes('979190') || id === '4fa22728-306d-4430-88b5-000093ee0c80';
+  });
+  
+  console.log('Patients filtered for deletion:', patients);
+  
+  if (patients.length > 0) {
+    const ids = patients.map(p => p.id);
+    console.log('Deleting patient IDs:', ids);
+    
+    // delete related
+    const { error: delInvsErr } = await supabase.from('invoices').delete().in('patient_id', ids);
+    console.log('Invoices deletion result:', delInvsErr);
+    
+    const { error: delPatsErr } = await supabase.from('patients').delete().in('id', ids);
+    console.log('Patients deletion result:', delPatsErr);
+  } else {
+    console.log('No patients matched deletion criteria.');
   }
 
-  console.log('Fetching invoices count...');
-  const { data: iData, error: iErr } = await supabase.from('invoices').select('*');
-  if (iErr) console.error('iErr:', iErr);
-  else console.log('Invoices count in DB:', iData?.length);
+  // Also search for any invoices named Amit Patel
+  const { data: allInvoices, error: iErr } = await supabase.from('invoices').select('*');
+  if (!iErr && allInvoices) {
+    console.log('All Invoices currently in DB:', allInvoices);
+    const invoicesToDelete = allInvoices.filter(i => (i.patient_name || '').toLowerCase().includes('amit'));
+    if (invoicesToDelete.length > 0) {
+      const invIds = invoicesToDelete.map(i => i.id);
+      console.log('Deleting invoice items for:', invIds);
+      await supabase.from('invoice_items').delete().in('invoice_id', invIds);
+      console.log('Deleting invoices:', invIds);
+      await supabase.from('invoices').delete().in('id', invIds);
+    }
+  }
 }
 
 run();
+
