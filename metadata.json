@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix:update:: : new Global Hospital \u0026 Maternity Center",
+  "description": "Next-Generation Hospital Management System (HMS) for clinical, administrative, and financial operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
