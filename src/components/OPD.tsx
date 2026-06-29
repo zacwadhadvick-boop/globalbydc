@@ -1831,11 +1831,8 @@ export default function OPD() {
                     <Button className="bg-medical-blue font-semibold" onClick={() => handleRegistration(false)}>Save Changes</Button>
                   ) : (
                     <>
-                      <Button variant="outline" className="border-medical-blue text-medical-blue hover:bg-medical-blue/10 font-semibold" onClick={() => handleRegistration(false)}>
+                      <Button className="bg-medical-blue font-semibold text-white hover:bg-blue-700" onClick={() => handleRegistration(false)}>
                         Register Patient
-                      </Button>
-                      <Button className="bg-medical-blue font-semibold" onClick={() => handleRegistration(true)}>
-                        Book Appointment
                       </Button>
                     </>
                   )}

@@ -130,11 +130,11 @@ export function getPrescriptionPrintHtml(
           }
           .container {
             width: 100%;
-            min-height: 260mm;
-            display: flex;
-            flex-direction: column;
+            min-height: 262mm;
+            position: relative;
             box-sizing: border-box;
             padding-top: ${isValidTemplateImage ? '240px' : '0px'};
+            padding-bottom: 220px; /* Safe space to prevent table content overlap with footers */
           }
           
           /* Custom Premium Letterhead styling */
@@ -197,12 +197,14 @@ export function getPrescriptionPrintHtml(
           
           /* Footer & Authorizations */
           .footer-section {
-            margin-top: auto;
+            position: absolute;
+            bottom: 110px; /* Positioned perfectly above bottom footer */
+            left: 0;
+            right: 0;
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
             page-break-inside: avoid;
-            margin-bottom: 15px;
           }
           .footer-left {
             max-width: 360px;
@@ -359,7 +361,7 @@ export function getPrescriptionPrintHtml(
           </div>
 
           <!-- Bottom Custom Footer from Image 2 -->
-          <div style="page-break-inside: avoid;">
+          <div style="position: absolute; bottom: 0; left: 0; right: 0; page-break-inside: avoid;">
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 10px 5px 10px; border-top: 1.5px solid #e2e8f0;">
               <!-- Left: 24/7 Services Badge -->
               <div style="display: flex; align-items: center; gap: 8px;">
