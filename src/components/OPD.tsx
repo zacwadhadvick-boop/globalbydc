@@ -122,12 +122,6 @@ export default function OPD() {
     const charges = storage.get(STORAGE_KEYS.OPD_CHARGES, { reg: 200, appt: 300, consult: 500 });
     return charges.consult || 500;
   }); 
-
-  const getNetFee = (apt: any) => {
-    const baseFee = Number(apt.fee || appointmentFee || 0);
-    const discount = Number(apt.discount_amount || apt.discountAmount || 0);
-    return Math.max(0, baseFee - discount);
-  };
   
   // Custom Fee / Charge applies checkboxes states
   const [selectedRegFees, setSelectedRegFees] = useState(() => {
@@ -228,7 +222,10 @@ export default function OPD() {
   }));
 
   const fetchData = async () => {
-    setLoading(true);
+    const isInitial = patients.length === 0 && appointments.length === 0;
+    if (isInitial) {
+      setLoading(true);
+    }
     try {
       const [patientsData, appointmentsData, prescriptionsData, staffData] = await Promise.all([
         supabaseService.getPatients(),
@@ -919,15 +916,11 @@ export default function OPD() {
 
       if (selectedInvoiceItems.length > 0) {
         // Create Invoice for selected Consultation/Appointment Fees
-        const discountAmt = Number(newAppointment.discountAmount || 0);
-        const payableAmt = Math.max(0, calculatedTotal - discountAmt);
         const invoiceData = {
           patient_id: newAppointment.patientId,
           invoice_number: `INV-OPD-${Date.now()}`,
           status: 'Unpaid',
           total_amount: calculatedTotal,
-          discount_amount: discountAmt,
-          payable_amount: payableAmt,
           paid_amount: 0,
           payment_method: 'Cash',
           type: 'OPD',
@@ -1071,35 +1064,23 @@ export default function OPD() {
 
             if (pendingOPDInvoices.length > 0) {
               for (const inv of pendingOPDInvoices) {
-                const discountAmt = Number(inv.discount_amount ?? apt.discount_amount ?? apt.discountAmount ?? 0);
-                const totalAmt = Number(inv.total_amount ?? 0);
-                const totalToPay = Number(inv.payable_amount ?? Math.max(0, totalAmt - discountAmt));
+                const totalToPay = Number(inv.payable_amount ?? inv.total_amount ?? 0);
                 await supabaseService.updateInvoice(
                   inv.id, 
-                  { 
-                    ...inv, 
-                    status: 'Paid', 
-                    payment_status: 'Paid', 
-                    discount_amount: discountAmt,
-                    payable_amount: totalToPay,
-                    paid_amount: totalToPay 
-                  }
+                  { ...inv, status: 'Paid', payment_status: 'Paid', paid_amount: totalToPay }
                 );
               }
             } else {
               // Creating a Paid OPD Consultation Invoice as backup fallback so it immediately appears in Billing logs
               const feeToCollect = Number(apt.fee || appointmentFee || 500);
-              const discountAmt = Number(apt.discount_amount || apt.discountAmount || 0);
-              const payable = Math.max(0, feeToCollect - discountAmt);
               const invoiceData = {
                 patient_id: patientId,
                 invoice_number: `INV-OPD-${Date.now()}`,
                 status: 'Paid',
                 payment_status: 'Paid',
                 total_amount: feeToCollect,
-                discount_amount: discountAmt,
-                payable_amount: payable,
-                paid_amount: payable,
+                payable_amount: feeToCollect,
+                paid_amount: feeToCollect,
                 payment_method: 'Cash',
                 type: 'OPD',
                 created_by: currentUser?.id
@@ -2202,9 +2183,8 @@ export default function OPD() {
                         </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        <div className="flex flex-col gap-0.5">
-                          <Badge 
-                            variant="outline" 
+                         <Badge 
+                           variant="outline" 
                            className={`${
                              apt.payment_status === 'Refunded' 
                                ? 'bg-slate-100 text-slate-600 border-slate-200' 
@@ -2214,18 +2194,12 @@ export default function OPD() {
                            } border-none`}
                          >
                            {apt.payment_status === 'Refunded' 
-                             ? `Refunded - ₹${getNetFee(apt)}` 
+                             ? `Refunded - ₹${apt.fee || appointmentFee}` 
                              : (apt.payment_status || 'Pending') === 'Paid' 
-                               ? `Paid - ₹${getNetFee(apt)}` 
-                               : `Pending - ₹${getNetFee(apt)}`
+                               ? `Paid - ₹${apt.fee || appointmentFee}` 
+                               : `Pending - ₹${apt.fee || appointmentFee}`
                            }
                          </Badge>
-                          {(Number(apt.discount_amount || apt.discountAmount || 0) > 0) && (
-                            <span className="text-[10px] text-amber-600 font-bold px-1.5 text-center">
-                              ₹{apt.discount_amount || apt.discountAmount} Disc.
-                            </span>
-                          )}
-                        </div>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <Badge className={`${getUrgencyColor(apt.urgency as string)} border-none py-0 h-5 text-[10px]`}>
@@ -2241,7 +2215,7 @@ export default function OPD() {
                               className="h-8 text-[10px] font-black uppercase tracking-wider text-amber-600 border-amber-100 hover:bg-amber-50 px-2"
                               onClick={() => handleRefundAppointment(apt.id)}
                             >
-                              Refund ₹{getNetFee(apt)}
+                              Refund ₹{apt.fee || appointmentFee}
                             </Button>
                           ) : apt.payment_status !== 'Refunded' ? (
                             <Button 
@@ -2250,7 +2224,7 @@ export default function OPD() {
                               className="h-8 text-[10px] font-black uppercase tracking-wider text-emerald-600 border-emerald-100 hover:bg-emerald-50 bg-emerald-50/50 px-2"
                               onClick={() => handlePayAppointment(apt.id)}
                             >
-                              Collect ₹{getNetFee(apt)}
+                              Collect ₹{apt.fee || appointmentFee}
                             </Button>
                           ) : null}
                           <Button 

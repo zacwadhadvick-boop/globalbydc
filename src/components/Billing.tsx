@@ -91,7 +91,10 @@ export default function Billing() {
   }));
 
   const fetchData = async () => {
-    setLoading(true);
+    const isInitial = bills.length === 0;
+    if (isInitial) {
+      setLoading(true);
+    }
     const [invoicesData, patientsData, staffData, expensesData, appointmentsData] = await Promise.all([
       supabaseService.getInvoices(),
       supabaseService.getPatients(),

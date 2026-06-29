@@ -269,6 +269,54 @@ async function ensureForeignKeysExist(payload: any) {
 }
 
 // --- SCHEMA NORMALIZATION HELPERS ---
+function cleanTimeForPostgres(timeStr: string | null | undefined): string {
+  if (!timeStr) return '10:00:00';
+  const trimmed = String(timeStr).trim();
+  // Check if it's already in 24h format (e.g., "14:30" or "14:30:00")
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    return trimmed.length === 5 ? `${trimmed}:00` : trimmed;
+  }
+  // Check if it's single hour 24h format (e.g., "9:30")
+  if (/^\d{1}:\d{2}(:\d{2})?$/.test(trimmed)) {
+    return `0${trimmed}${trimmed.length === 4 ? ':00' : ''}`;
+  }
+
+  // Parse AM/PM format (e.g., "10:00 AM", "02:30 PM", "2:30 PM")
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const ampm = match[3].toUpperCase();
+    if (ampm === 'PM' && hours < 12) {
+      hours += 12;
+    } else if (ampm === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    return `${String(hours).padStart(2, '0')}:${minutes}:00`;
+  }
+
+  // Fallback
+  return '10:00:00';
+}
+
+function formatTime12h(timeStr: string | null | undefined): string {
+  if (!timeStr) return '10:00 AM';
+  const trimmed = String(timeStr).trim();
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    if (hours > 12) {
+      hours -= 12;
+    } else if (hours === 0) {
+      hours = 12;
+    }
+    return `${hours}:${minutes} ${ampm}`;
+  }
+  return trimmed;
+}
+
 function cleanAppointmentForPostgres(apt: any) {
   if (!apt) return apt;
   const cleaned = { ...apt };
@@ -308,6 +356,10 @@ function cleanAppointmentForPostgres(apt: any) {
   }
 
   cleaned.urgency = urgencyVal;
+
+  // Normalize appointment_time to standard 24h format for Postgres TIME column compatibility
+  let timeVal = cleaned.appointment_time || cleaned.appointmentTime || cleaned.time || '10:00 AM';
+  cleaned.appointment_time = cleanTimeForPostgres(timeVal);
   
   // list of actual columns in supabase_schema.sql
   const validColumns = [
@@ -425,6 +477,10 @@ function mapAppointmentFromPostgres(apt: any) {
     if (p) {
       mapped.patients = { name: p.name, mrn: p.mrn, age: p.age, gender: p.gender };
     }
+  }
+
+  if (mapped.appointment_time) {
+    mapped.appointment_time = formatTime12h(mapped.appointment_time);
   }
   return mapped;
 }
@@ -743,7 +799,8 @@ function mapOTScheduleFromPostgres(row: any) {
   const surgeonId = row.surgeonId || row.surgeon_id;
   const operationName = row.operationName || row.operation_name || row.procedure_name || '';
   const date = row.date || row.scheduled_date || row.surgery_date;
-  const startTime = row.startTime || row.start_time || row.scheduled_time || row.surgery_time;
+  const rawStartTime = row.startTime || row.start_time || row.scheduled_time || row.surgery_time;
+  const startTime = rawStartTime ? formatTime12h(rawStartTime) : '10:00 AM';
   
   return {
     ...row,
@@ -774,7 +831,8 @@ function mapOTScheduleFromPostgres(row: any) {
 function cleanOTScheduleForPostgres(sch: any) {
   if (!sch) return sch;
   const dateVal = sch.date || sch.scheduled_date || sch.surgery_date || null;
-  const timeVal = sch.time || sch.startTime || sch.scheduled_time || sch.surgery_time || null;
+  const rawTimeVal = sch.time || sch.startTime || sch.scheduled_time || sch.surgery_time || '10:00 AM';
+  const timeVal = cleanTimeForPostgres(rawTimeVal);
   const theatreVal = sch.theatreId || sch.room_id || sch.ot_rooms_id || null;
   const nameVal = sch.operationName || sch.operation_name || sch.procedure_name || null;
   return cleanUuidFields({
@@ -997,23 +1055,25 @@ export function normalizePatient(p: any) {
 
 export function isDummyPatient(p: any): boolean {
   if (!p) return false;
-  const name = (p.name || p.patientName || p.patient_name || '').toLowerCase().trim();
   const id = String(p.id || p.patientId || p.patient_id || '').toLowerCase().trim();
+  const name = (p.name || p.patientName || p.patient_name || '').toLowerCase().trim();
   
-  // Exact names of seeded mock/dummy records to filter out
-  const exactDummyNames = [
-    'dummy', 'test', 'mock', 'trial', 'temp',
-    'amit patel', 'priya singh', 'rahul sharma', 'sameer khan', 'ananya verma'
-  ];
+  // If it is a valid UUID, it is a real database record and should NEVER be filtered out.
+  if (isUuid(id)) {
+    return false;
+  }
   
   // Exact IDs of seeded mock/dummy records to filter out
-  const exactDummyIds = ['p1', 'p2', 'p3'];
+  const exactDummyIds = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'];
 
   return (
-    exactDummyNames.includes(name) ||
     exactDummyIds.includes(id) ||
     id.startsWith('dummy') ||
-    id.startsWith('mock')
+    id.startsWith('mock') ||
+    name === 'dummy' ||
+    name === 'test' ||
+    name === 'mock' ||
+    name === 'temp'
   );
 }
 
