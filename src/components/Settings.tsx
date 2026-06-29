@@ -1172,7 +1172,7 @@ export default function Settings({ currentUser, onUserUpdate, onHospitalUpdate }
           ${templateImage ? `<div class="template-bg"><img src="${templateImage}" style="width: 100%;" /></div>` : ''}
           <div class="content">
             <div class="hospital-header">
-              ${hospitalInfo.logo ? `<img src="${hospitalInfo.logo}" style="height: 60px; margin-bottom: 10px;" />` : ''}
+              ${(hospitalInfo.logo && hospitalInfo.logo !== 'null' && hospitalInfo.logo !== 'undefined' && hospitalInfo.logo.trim() !== '') ? `<img src="${hospitalInfo.logo}" style="height: 60px; margin-bottom: 10px;" />` : ''}
               <div class="hospital-name">${hospitalInfo.name}</div>
               <div class="hospital-info">${hospitalInfo.address} | Tel: ${hospitalInfo.phone}</div>
             </div>
@@ -1352,37 +1352,70 @@ export default function Settings({ currentUser, onUserUpdate, onHospitalUpdate }
               <CardDescription>Configure your hospital's public identity and contact details.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex flex-col md:flex-row gap-8">
+               <div className="flex flex-col md:flex-row gap-8">
                 <div className="flex flex-col items-center gap-4">
                   <div className="w-32 h-32 bg-slate-100 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 overflow-hidden">
-                    {hospitalInfo.logo ? (
-                      <img src={hospitalInfo.logo} alt="Logo" className="w-full h-full object-contain" />
+                    {hospitalInfo.logo && hospitalInfo.logo !== 'null' && hospitalInfo.logo !== 'undefined' && hospitalInfo.logo.trim() !== '' ? (
+                      <img src={hospitalInfo.logo} alt="Logo" className="w-full h-full object-contain p-2" />
                     ) : (
                       <>
                         <Upload className="w-8 h-8 mb-2" />
-                        <span className="text-[10px] font-bold uppercase">Upload Logo</span>
+                        <span className="text-[10px] font-bold uppercase text-slate-500">Upload Logo</span>
                       </>
                     )}
                   </div>
-                  <Button variant="outline" size="sm" className="w-full h-8 text-xs relative cursor-pointer overflow-hidden" asChild>
-                    <label className="flex items-center justify-center cursor-pointer w-full h-full">
-                      Change Logo
-                      <input 
-                        type="file" 
-                        className="hidden" 
-                        accept="image/*" 
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            resizeImage(file, 256, 256, (resizedBase64) => {
-                              setHospitalInfo({ ...hospitalInfo, logo: resizedBase64 });
-                              toast.success('Hospital logo changed and scaled successfully!');
-                            });
-                          }
-                        }} 
-                      />
-                    </label>
-                  </Button>
+                  <div className="flex flex-col gap-2 w-full">
+                    <Button variant="outline" size="sm" className="w-full h-8 text-xs relative cursor-pointer overflow-hidden" asChild>
+                      <label className="flex items-center justify-center cursor-pointer w-full h-full">
+                        Change Logo
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*" 
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                resizeImage(file, 256, 256, (resizedBase64) => {
+                                  if (resizedBase64) {
+                                    setHospitalInfo({ ...hospitalInfo, logo: resizedBase64 });
+                                    toast.success('Hospital logo changed and scaled successfully!');
+                                  } else {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      setHospitalInfo({ ...hospitalInfo, logo: reader.result as string });
+                                      toast.success('Hospital logo uploaded successfully!');
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                });
+                              } catch (err) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setHospitalInfo({ ...hospitalInfo, logo: reader.result as string });
+                                  toast.success('Hospital logo uploaded successfully!');
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }
+                          }} 
+                        />
+                      </label>
+                    </Button>
+                    {hospitalInfo.logo && hospitalInfo.logo !== 'null' && hospitalInfo.logo !== 'undefined' && hospitalInfo.logo.trim() !== '' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-rose-500 h-8 hover:text-rose-700 hover:bg-rose-50 text-xs font-semibold w-full"
+                        onClick={() => {
+                          setHospitalInfo({ ...hospitalInfo, logo: null });
+                          toast.success('Logo removed. Save changes to apply.');
+                        }}
+                      >
+                        Remove Logo
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">

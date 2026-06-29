@@ -162,7 +162,7 @@ export default function Insurance() {
         <body>
           <div class="content">
             <div class="hospital-info">
-              ${hospitalInfo.logo_url ? `<img src="${hospitalInfo.logo_url}" style="height: 60px; margin-bottom: 10px;" /><br/>` : ''}
+              ${((hospitalInfo.logo || hospitalInfo.logo_url) && (hospitalInfo.logo || hospitalInfo.logo_url) !== 'null' && (hospitalInfo.logo || hospitalInfo.logo_url) !== 'undefined' && (hospitalInfo.logo || hospitalInfo.logo_url).trim() !== '') ? `<img src="${hospitalInfo.logo || hospitalInfo.logo_url}" style="height: 60px; margin-bottom: 10px;" /><br/>` : ''}
               <div style="font-size: 24px; font-weight: bold; color: #2563eb;">${hospitalInfo.name}</div>
               <div>${hospitalInfo.address}</div>
               <div>Contact: ${hospitalInfo.phone} | Email: ${hospitalInfo.email}</div>

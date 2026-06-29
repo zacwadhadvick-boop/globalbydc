@@ -1822,10 +1822,12 @@ const rawSupabaseService = {
       
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
+        const rawLogo = data.logo_url || data.logo || null;
+        const validLogo = (typeof rawLogo === 'string' && rawLogo.trim() !== '' && rawLogo !== 'null' && rawLogo !== 'undefined') ? rawLogo : null;
         return {
           ...data,
           gst: data.tax_id || data.gst || '',
-          logo: data.logo_url || data.logo || null,
+          logo: validLogo,
           template_image: data.registration_number || null
         };
       }
@@ -1855,13 +1857,16 @@ const rawSupabaseService = {
 
       if (fetchErr) throw fetchErr;
 
+      const rawLogo = info.logo || info.logo_url || null;
+      const validLogo = (typeof rawLogo === 'string' && rawLogo.trim() !== '' && rawLogo !== 'null' && rawLogo !== 'undefined') ? rawLogo : null;
+
       const payload = {
         name: info.name || 'Medicare Multispeciality Hospital',
         address: info.address || '',
         phone: info.phone || '',
         email: info.email || '',
         website: info.website || '',
-        logo_url: info.logo || info.logo_url || null,
+        logo_url: validLogo,
         tax_id: info.gst || info.tax_id || null,
         registration_number: info.template_image !== undefined ? info.template_image : null,
         updated_at: new Date().toISOString()
@@ -1889,10 +1894,12 @@ const rawSupabaseService = {
       }
 
       if (result) {
+        const rawResLogo = result.logo_url || result.logo || null;
+        const validResLogo = (typeof rawResLogo === 'string' && rawResLogo.trim() !== '' && rawResLogo !== 'null' && rawResLogo !== 'undefined') ? rawResLogo : null;
         return {
           ...result,
           gst: result.tax_id || result.gst || '',
-          logo: result.logo_url || result.logo || null,
+          logo: validResLogo,
           template_image: result.registration_number || null
         };
       }

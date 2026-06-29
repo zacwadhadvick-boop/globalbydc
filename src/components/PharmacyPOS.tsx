@@ -616,7 +616,7 @@ export default function PharmacyPOS() {
         </head>
         <body>
           <div class="header text-center">
-            ${hospitalInfo.logo ? `<img src="${hospitalInfo.logo}" class="logo" />` : ''}
+            ${(hospitalInfo.logo && hospitalInfo.logo !== 'null' && hospitalInfo.logo !== 'undefined' && hospitalInfo.logo.trim() !== '') ? `<img src="${hospitalInfo.logo}" class="logo" />` : ''}
             <div class="bold" style="font-size: 14px;">${hospitalInfo.name}</div>
             <div style="font-size: 9px;">${hospitalInfo.address}</div>
             <div style="font-size: 9px;">Tel: ${hospitalInfo.phone}</div>

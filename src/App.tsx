@@ -110,10 +110,10 @@ function SidebarContent({ onLogout, user, hospitalInfo }: { onLogout: () => void
     <div className="flex flex-col h-full bg-white border-r overflow-hidden">
       <div className="p-6 flex items-center gap-3 flex-shrink-0">
         <div className="w-10 h-10 bg-medical-blue rounded-lg flex items-center justify-center text-white font-bold text-xl overflow-hidden">
-          {hospitalInfo.logo ? (
+          {hospitalInfo.logo && hospitalInfo.logo !== 'null' && hospitalInfo.logo !== 'undefined' && hospitalInfo.logo.trim() !== '' ? (
             <img src={hospitalInfo.logo} alt="Logo" className="w-full h-full object-cover" />
           ) : (
-            hospitalInfo.name.charAt(0)
+            (hospitalInfo?.name || 'H').charAt(0)
           )}
         </div>
         <div>
