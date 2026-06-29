@@ -997,16 +997,23 @@ export function normalizePatient(p: any) {
 
 export function isDummyPatient(p: any): boolean {
   if (!p) return false;
-  const name = (p.name || '').toLowerCase();
-  const id = String(p.id || '').toLowerCase();
+  const name = (p.name || p.patientName || p.patient_name || '').toLowerCase().trim();
+  const id = String(p.id || p.patientId || p.patient_id || '').toLowerCase().trim();
+  
+  // Exact names of seeded mock/dummy records to filter out
+  const exactDummyNames = [
+    'dummy', 'test', 'mock', 'trial', 'temp',
+    'amit patel', 'priya singh', 'rahul sharma', 'sameer khan', 'ananya verma'
+  ];
+  
+  // Exact IDs of seeded mock/dummy records to filter out
+  const exactDummyIds = ['p1', 'p2', 'p3'];
+
   return (
-    name.includes('dummy') ||
-    name.includes('test') ||
-    name.includes('mock') ||
-    name.includes('trial') ||
-    name.includes('temp') ||
-    id.includes('dummy') ||
-    id.includes('test')
+    exactDummyNames.includes(name) ||
+    exactDummyIds.includes(id) ||
+    id.startsWith('dummy') ||
+    id.startsWith('mock')
   );
 }
 
@@ -1169,7 +1176,10 @@ const rawSupabaseService = {
         .order('appointment_date', { ascending: true });
       
       if (error) throw error;
-      return (data || []).map(mapAppointmentFromPostgres);
+      return (data || []).map(mapAppointmentFromPostgres).filter((apt: any) => {
+        const pat = apt.patients || { id: apt.patient_id || apt.patientId, name: apt.patientName || apt.patient_name };
+        return !isDummyPatient(pat);
+      });
     } catch (error: any) {
       console.error('Error fetching appointments:', error.message);
       return null;
@@ -1340,14 +1350,20 @@ const rawSupabaseService = {
       const { data, error } = await query.order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data;
+      return (data || []).filter((rx: any) => {
+        const pat = rx.patients || { id: rx.patient_id || rx.patientId, name: rx.patientName || rx.patient_name };
+        return !isDummyPatient(pat);
+      });
     } catch (error: any) {
       console.warn('Handling local fallback for prescriptions:', error.message);
       let localData = storage.get(STORAGE_KEYS.PRESCRIPTIONS, MOCK_PRESCRIPTIONS);
       if (patientId) {
         localData = localData.filter((rx: any) => rx.patientId === patientId || rx.patient_id === patientId);
       }
-      return localData;
+      return localData.filter((rx: any) => {
+        const pat = rx.patients || { id: rx.patient_id || rx.patientId, name: rx.patientName || rx.patient_name };
+        return !isDummyPatient(pat);
+      });
     }
   },
 
@@ -1392,6 +1408,9 @@ const rawSupabaseService = {
             mappedInv.invoice_items = inv.invoice_items.map(mapInvoiceItemFromPostgres);
           }
           return mappedInv;
+        }).filter((inv: any) => {
+          const pat = inv.patients || { id: inv.patient_id || inv.patientId, name: inv.patient_name || inv.patientName };
+          return !isDummyPatient(pat);
         });
       }
       return data;
@@ -3038,15 +3057,23 @@ const rawSupabaseService = {
         .order('admission_date', { ascending: false });
       
       if (error) throw error;
-      return data?.map((a: any) => ({
+      const mapped = data?.map((a: any) => ({
         ...a,
         urgency: a.urgency || a.reason || 'Routine',
         reason: a.reason || '',
         diagnosis: a.diagnosis || a.reason || ''
       })) || [];
+      return mapped.filter((adm: any) => {
+        const pat = { id: adm.patient_id || adm.patientId, name: adm.patient_name || adm.patientName };
+        return !isDummyPatient(pat);
+      });
     } catch (error: any) {
       console.warn('Handling local fallback for admissions:', error.message);
-      return storage.get('hms_admissions', []);
+      const localData = storage.get('hms_admissions', []);
+      return localData.filter((adm: any) => {
+        const pat = { id: adm.patient_id || adm.patientId, name: adm.patient_name || adm.patientName };
+        return !isDummyPatient(pat);
+      });
     }
   },
 
@@ -3116,10 +3143,18 @@ const rawSupabaseService = {
         .order('discharge_date', { ascending: false });
       
       if (error) throw error;
-      return data?.map(normalizeDischargeSummary) || [];
+      const mapped = data?.map(normalizeDischargeSummary) || [];
+      return mapped.filter((s: any) => {
+        const pat = { id: s.patient_id || s.patientId, name: s.patientName || s.patient_name };
+        return !isDummyPatient(pat);
+      });
     } catch (error: any) {
       console.warn('Handling local fallback for discharge summaries:', error.message);
-      return (storage.get('hms_discharge_summaries', []) || []).map(normalizeDischargeSummary);
+      const localData = storage.get('hms_discharge_summaries', []) || [];
+      return localData.map(normalizeDischargeSummary).filter((s: any) => {
+        const pat = { id: s.patient_id || s.patientId, name: s.patientName || s.patient_name };
+        return !isDummyPatient(pat);
+      });
     }
   },
 
@@ -4159,6 +4194,9 @@ function executeOfflineQuery(key: string, args: any[]): any {
           urgency: apt.urgency || 'Routine',
           status: apt.status || 'Scheduled'
         };
+      }).filter((apt: any) => {
+        const pat = apt.patients || { id: apt.patient_id || apt.patientId, name: apt.patientName || apt.patient_name };
+        return !isDummyPatient(pat);
       });
     } else if (key === 'getLabTestRequests') {
       const patientsList = storage.get(STORAGE_KEYS.PATIENTS, MOCK_PATIENTS);
@@ -4198,7 +4236,10 @@ function executeOfflineQuery(key: string, args: any[]): any {
     } else if (key === 'getBeds') {
       cached = cached.map(normalizeBed);
     } else if (key === 'getDischargeSummaries') {
-      cached = cached.map(normalizeDischargeSummary);
+      cached = cached.map(normalizeDischargeSummary).filter((s: any) => {
+        const pat = { id: s.patient_id || s.patientId, name: s.patientName || s.patient_name };
+        return !isDummyPatient(pat);
+      });
     } else if (key === 'getInvoices') {
       const patientsList = storage.get(STORAGE_KEYS.PATIENTS, MOCK_PATIENTS);
       const itemsList = storage.get('hms_invoice_items', []);
@@ -4227,6 +4268,9 @@ function executeOfflineQuery(key: string, args: any[]): any {
           patient_id: pid,
           created_at: inv.created_at || inv.date || new Date().toISOString()
         });
+      }).filter((inv: any) => {
+        const pat = inv.patients || { id: inv.patient_id || inv.patientId, name: inv.patientName || inv.patient_name };
+        return !isDummyPatient(pat);
       });
     } else if (key === 'getPharmacyItems') {
       cached = cached.map(mapPharmacyItemFromPostgres);
@@ -4235,17 +4279,17 @@ function executeOfflineQuery(key: string, args: any[]): any {
   }
   
   if (key === 'getDashboardStats') {
-    const patients = storage.get(STORAGE_KEYS.PATIENTS, MOCK_PATIENTS);
-    const appointments = storage.get(STORAGE_KEYS.APPOINTMENTS, MOCK_APPOINTMENTS);
-    const bills = storage.get(STORAGE_KEYS.BILLING, MOCK_BILLING);
-    const admissions = storage.get('hms_admissions', []);
+    const patients = storage.get(STORAGE_KEYS.PATIENTS, MOCK_PATIENTS).filter((p: any) => !isDummyPatient(p));
+    const appointments = storage.get(STORAGE_KEYS.APPOINTMENTS, MOCK_APPOINTMENTS).filter((a: any) => !isDummyPatient({ id: a.patientId || a.patient_id, name: a.patientName || a.patient_name }));
+    const bills = storage.get(STORAGE_KEYS.BILLING, MOCK_BILLING).filter((b: any) => !isDummyPatient({ id: b.patientId || b.patient_id, name: b.patientName || b.patient_name }));
+    const admissions = storage.get('hms_admissions', []).filter((a: any) => !isDummyPatient({ id: a.patientId || a.patient_id, name: a.patientName || a.patient_name }));
     const activeAdmissions = admissions.filter((a: any) => a.status === 'Admitted');
     
     const totalRevenue = bills.reduce((sum: number, b: any) => sum + (Number(b.paid_amount) || Number(b.total_amount) || Number(b.total) || 0), 0);
     return {
       patientCount: patients.length,
       appointmentCount: appointments.length,
-      admissionCount: activeAdmissions.length || 4,
+      admissionCount: activeAdmissions.length,
       totalRevenue
     };
   }
